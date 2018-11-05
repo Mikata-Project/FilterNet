@@ -1,7 +1,8 @@
 ## FilterNet
 FilterNet is a ensemble neural network model used for time series analysis. It is comprised of a 1D convolutional neural
 network and fast.ai's ixedInputModel. An example of the network implemented in PyTorch is located in filternet.py and 
-provides the model class along with its corresponding dataset class.
+provides the model class along with its corresponding dataset class. Links to the abstract, slides, and video of our
+presentation at PyData Los Angeles 2018 will be provided below.
 
 This 1D convolutional neural network (CNN) was inspired by the traditional use of filters in discrete time signal 
 processing. While developed independently, it closely resembles the findings described in the 
@@ -14,6 +15,11 @@ model outperformed one of our current best production time series models ([TBATS
 
 Our hope is by open sourcing our approach it will help generate further ideas on how to improve time series modeling 
 using neural networks.
+
+PyData Los Angeles 2018 presentation:
+- [Abstract](https://pydata.org/la2018/schedule/presentation/14)
+- [Slides](https://docs.google.com/presentation/d/e/2PACX-1vR6eea4L_Z_hyz24kgch3Lt5eEQ9PmmI2gUys_DcQrWY0EbG5CfOy4suqeLejXEql3x-nYT2NshrQRc/pub?start=false&loop=false&delayms=3000)
+- Video (Coming soon)
 
 Contributing authors:
 - Jeff Roach (Data Scientist at System1)
