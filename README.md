@@ -19,7 +19,7 @@ using neural networks.
 PyData Los Angeles 2018 presentation:
 - [Abstract](https://pydata.org/la2018/schedule/presentation/14)
 - [Slides](https://docs.google.com/presentation/d/e/2PACX-1vR6eea4L_Z_hyz24kgch3Lt5eEQ9PmmI2gUys_DcQrWY0EbG5CfOy4suqeLejXEql3x-nYT2NshrQRc/pub?start=false&loop=false&delayms=3000)
-- Video (Coming soon)
+- [Video](https://www.youtube.com/watch?v=nMkqWxMjWzg)
 
 Contributing authors:
 - Jeff Roach (Data Scientist at System1)
