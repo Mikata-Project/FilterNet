@@ -62,6 +62,7 @@ class FilterNet24H2(nn.Module):
         return [self.n_emb + self.n_cont] + layers + [out_sz]
 
     def forward(self, x_window, x_cat, x_cont):
+        # TODO: Use the filters arg to generate the conv_layers dynamically
         # Wavenet model
         self.f1a = self.c1a(x_window)
         self.f1b = self.c1b(self.f1a)
