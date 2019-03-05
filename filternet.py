@@ -18,6 +18,7 @@ class FilterNet24H2(nn.Module):
                  y_range=None, use_bn=False, ps=None, bn_final=False):
         super().__init__()
 
+        # TODO: Use the filters arg to generate the conv_layers dynamically
         # Wavenet model layers
         self.c1a = conv_layer(window=window // 2, ks=1, dilation=1)
         self.c1b = conv_layer(window=window // 4, ks=1, dilation=2)
