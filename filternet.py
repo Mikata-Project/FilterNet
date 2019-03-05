@@ -1,14 +1,9 @@
-from fastai.column_data import emb_init
-from fastai.core import A, V
-from fastai.dataloader import DataLoader
-from fastai.dataset import ModelData
-from fastai.layers import Flatten
+from fastai.core import ifnone, listify
+from fastai.layers import bn_drop_lin, embedding, Flatten
 import numpy as np
 import torch
 from torch import nn
-from torch.nn.init import kaiming_normal
 from torch.utils.data import Dataset
-import torch.nn.functional as F
 
 
 def conv_layer(window, ks=3, dilation=1):
@@ -19,11 +14,10 @@ def conv_layer(window, ks=3, dilation=1):
 
 
 class FilterNet24H2(nn.Module):
-    def __init__(self, emb_szs, n_cont, emb_drop, out_sz, szs, drops, window=24, filters=[1, 2, 3, 4, 5, 6],
-                 y_range=None, use_bn=False, is_reg=True, is_multi=False):
+    def __init__(self, emb_szs, n_cont, out_sz, layers, emb_drop=0., window=24, filters=[1, 2, 3, 4, 5, 6],
+                 y_range=None, use_bn=False, ps=None, bn_final=False):
         super().__init__()
 
-        # TODO: Use the filters arg to generate the conv_layers dynamically
         # Wavenet model layers
         self.c1a = conv_layer(window=window // 2, ks=1, dilation=1)
         self.c1b = conv_layer(window=window // 4, ks=1, dilation=2)
@@ -41,33 +35,32 @@ class FilterNet24H2(nn.Module):
         num_wave_outputs = (len(filters) * (window // 2)) + (len(filters) * (window // 4))
 
         # Fastai's Mixed Input model
-        self.embs = nn.ModuleList([nn.Embedding(c, s) for c, s in emb_szs])
-        for emb in self.embs: emb_init(emb)
-        n_emb = sum(e.embedding_dim for e in self.embs)
-        self.n_emb, self.n_cont = n_emb, n_cont
-
-        szs = [n_emb + n_cont] + szs
-        self.lins = nn.ModuleList([
-            nn.Linear(szs[i], szs[i + 1]) for i in range(len(szs) - 1)])
-        self.bns = nn.ModuleList([
-            nn.BatchNorm1d(sz) for sz in szs[1:]])
-        for o in self.lins: kaiming_normal(o.weight.data)
-        self.outp = nn.Linear(szs[-1], out_sz)
-        kaiming_normal(self.outp.weight.data)
-
+        ps = ifnone(ps, [0]*len(layers))
+        ps = listify(ps, layers)
+        self.embeds = nn.ModuleList([embedding(ni, nf) for ni,nf in emb_szs])
         self.emb_drop = nn.Dropout(emb_drop)
-        self.drops = nn.ModuleList([nn.Dropout(drop) for drop in drops])
-        self.bn = nn.BatchNorm1d(n_cont)
-        self.use_bn, self.y_range = use_bn, y_range
-        self.is_reg = is_reg
-        self.is_multi = is_multi
+        self.bn_cont = nn.BatchNorm1d(n_cont)
+        n_emb = sum(e.embedding_dim for e in self.embeds)
+        self.n_emb,self.n_cont,self.y_range = n_emb,n_cont,y_range
+        sizes = self.get_sizes(layers, out_sz)
+        actns = [nn.ReLU(inplace=True)] * (len(sizes)-2) + [None]
+        layers = []
+        for i,(n_in,n_out,dp,act) in enumerate(zip(sizes[:-2],sizes[1:-1],[0.]+ps,actns)):
+            layers += bn_drop_lin(n_in, n_out, bn=use_bn and i!=0, p=dp, actn=act)
+        if bn_final: layers.append(nn.BatchNorm1d(sizes[-1]))
+        self.layers = nn.Sequential(*layers)
 
         # Final layer
         self.f = Flatten()
-        self.lin = nn.Linear(szs[-1] + num_wave_outputs, out_sz, bias=False)
+        self.lin = nn.Linear(sizes[-2] + num_wave_outputs, out_sz, bias=False)
+
+        self.sizes = sizes
+        self.num_wave_outputs = num_wave_outputs
+
+    def get_sizes(self, layers, out_sz):
+        return [self.n_emb + self.n_cont] + layers + [out_sz]
 
     def forward(self, x_window, x_cat, x_cont):
-        # TODO: Use the filters arg to generate the conv_layers dynamically
         # Wavenet model
         self.f1a = self.c1a(x_window)
         self.f1b = self.c1b(self.f1a)
@@ -87,16 +80,15 @@ class FilterNet24H2(nn.Module):
 
         # Fastai's Mixed Input Model
         if self.n_emb != 0:
-            x = [e(x_cat[:, i]) for i, e in enumerate(self.embs)]
+            x = [e(x_cat[:,i]) for i,e in enumerate(self.embeds)]
             x = torch.cat(x, 1)
             x = self.emb_drop(x)
         if self.n_cont != 0:
-            x2 = self.bn(x_cont) if self.use_bn else x_cont
-            x = torch.cat([x, x2], 1) if self.n_emb != 0 else x2
-        for l, d, b in zip(self.lins, self.drops, self.bns):
-            x = F.relu(l(x))
-            if self.use_bn: x = b(x)
-            x = d(x)
+            x_cont = self.bn_cont(x_cont)
+            x = torch.cat([x, x_cont], 1) if self.n_emb != 0 else x_cont
+        x = self.layers(x)
+        if self.y_range is not None:
+            x = (self.y_range[1]-self.y_range[0]) * torch.sigmoid(x) + self.y_range[0]
 
         # Combine results from both nets
         x = x.unsqueeze(1)
@@ -112,6 +104,5 @@ class FilterNetDataset(Dataset):
         self.x_cont = x_cont
         self.y = y
 
-    def __getitem__(self, idx): return A(self.x_window[idx], self.x_cat[idx], self.x_cont[idx], self.y[idx])
+    def __getitem__(self, idx): return [self.x_window[idx], self.x_cat[idx], self.x_cont[idx]], self.y[idx]
     def __len__(self): return max(len(self.x_window), len(self.x_cat), len(self.x_cont))
-
